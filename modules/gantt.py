@@ -326,6 +326,35 @@ def build_gantt_eps(gantt_data, title="Project Gantt Chart", max_month=36):
         st.error(f"Gantt EPS error: {e}"); return None
 
 
+
+
+def build_gantt_html(gantt_data, title="Project Gantt Chart", max_month=36):
+    """
+    Export Gantt as a self-contained interactive HTML file.
+    Uses Plotly — fully interactive (zoom, pan, hover) in any browser.
+    No internet connection needed (all JS bundled inline).
+    """
+    try:
+        fig = build_gantt(gantt_data, None, max_month=max_month)
+        if fig is None:
+            return None
+        fig.update_layout(
+            title=dict(text=title, font=dict(size=14, color="white")),
+            paper_bgcolor="#0f1421",
+            plot_bgcolor="#1a2235",
+        )
+        html_str = fig.to_html(
+            full_html=True,
+            include_plotlyjs=True,   # bundle all JS inline — no internet needed
+            config={"responsive": True, "scrollZoom": True,
+                    "displayModeBar": True,
+                    "modeBarButtonsToRemove": ["lasso2d", "select2d"]},
+        )
+        return html_str.encode("utf-8")
+    except Exception as e:
+        st.error(f"Gantt HTML error: {e}")
+        return None
+
 # Backward-compat alias
 def build_gantt_matplotlib(gantt_data, title="Project Gantt Chart", max_month=36):
     return build_gantt_svg(gantt_data, title, max_month)
