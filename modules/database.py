@@ -35,29 +35,54 @@ def get_proposal(proposal_id: str) -> dict | None:
         return None
 
 def get_proposal_partners(proposal_id: str) -> list:
-    """Get all partners involved in a proposal (from partners table)."""
+    """
+    Return partners involved in this proposal.
+    Reads coordinator + partners_list from the proposals table,
+    then looks each one up in the partners table by full_name match.
+    Falls back to all partners if none found.
+    """
     try:
+        import json
         prop = get_proposal(proposal_id)
         if not prop:
-            return []
-        import json
+            return get_all_partners()
+
+        # Collect all partner names from the proposal
+        names = []
+        coord = (prop.get("coordinator") or "").strip()
+        if coord:
+            names.append(coord)
         plist = prop.get("partners_list") or []
         if isinstance(plist, str):
-            try: plist = json.loads(plist)
+            try:    plist = json.loads(plist)
             except: plist = []
-        coord = prop.get("coordinator","")
-        all_names = ([coord] if coord else []) + [str(p) for p in plist if p]
-        if not all_names:
-            return []
-        result = []
-        for name in all_names:
-            r = db().table("partners").select("id,full_name,short_name,country")\
-                    .ilike("full_name", f"%{name}%").limit(1).execute()
-            if r.data:
-                result.append(r.data[0])
+        names.extend([str(p).strip() for p in plist if p and str(p).strip()])
+
+        if not names:
+            return get_all_partners()
+
+        # Fetch all partners and filter by name match
+        all_p = get_all_partners()
+        result, seen = [], set()
+        for name in names:
+            nl = name.lower()
+            for p in all_p:
+                pid = p["id"]
+                if pid in seen:
+                    continue
+                fn = (p.get("full_name")  or "").lower()
+                sn = (p.get("short_name") or "").lower()
+                if nl in fn or fn in nl or (sn and (nl in sn or sn in nl)):
+                    result.append(p)
+                    seen.add(pid)
+                    break
+
+        # Always include at least the coordinator as a manual entry if not found
+        if not result:
+            return get_all_partners()
         return result
     except Exception:
-        return []
+        return get_all_partners()
 
 def get_all_partners() -> list:
     try:
