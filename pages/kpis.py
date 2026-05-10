@@ -130,26 +130,54 @@ with tab_short:
                         set_kpi_links(kid,"milestone",   [ms_opts[l]  for l in sel_ms_links])
                         st.success("✅ KPI added!"); st.rerun()
 
-    # Display short-term KPIs
+    # Display short-term KPIs with edit
     for k in kpis_short:
-        kid   = k["kpi_id"]
-        acc   = D["accent"]; muted = D["muted"]; txt = D["text"]
-        bg2   = D["bg2"]; border = D["border"]
-        st.markdown(
-            f"<div style='background:{bg2};border:1px solid {border};"
-            f"border-left:4px solid {acc};border-radius:10px;"
-            f"padding:0.8rem 1rem;margin-bottom:0.4rem'>"
-            f"<div style='display:flex;align-items:center;gap:0.8rem;flex-wrap:wrap'>"
-            f"<strong style='color:{acc}'>{k['kpi_number']}</strong>"
-            f"<strong style='color:{txt}'>{k.get('kpi_title','')}</strong>"
-            f"<span style='color:{muted};font-size:0.78rem'>"
-            f"Baseline: {k.get('baseline_value','0')} → Target: {k.get('target_value','')} "
-            f"{k.get('unit','')} · Month {k.get('target_month','?')}</span>"
-            f"</div></div>",
-            unsafe_allow_html=True
-        )
-        if st.button(f"🗑 Delete {k['kpi_number']}", key=f"dkpi_s_{kid}"):
-            delete_kpi(kid); st.rerun()
+        kid  = k["kpi_id"]
+        knum = k.get("kpi_number","")
+        acc  = D["accent"]; muted = D["muted"]
+
+        with st.expander(
+            f"📊 {knum}: {k.get('kpi_title','')}  ·  "
+            f"Baseline {k.get('baseline_value','0')} → Target {k.get('target_value','')} {k.get('unit','')} · Month {k.get('target_month','?')}",
+            expanded=False
+        ):
+            with st.form(f"edit_kpi_s_{kid}"):
+                ek1,ek2 = st.columns([1,4])
+                with ek1: e_knum   = st.text_input("KPI #", value=knum)
+                with ek2: e_ktitle = st.text_input("Title", value=k.get("kpi_title",""))
+                e_kdesc = st.text_area("Description", value=k.get("kpi_description",""), height=60)
+                ekc1,ekc2,ekc3 = st.columns(3)
+                with ekc1:
+                    level_opts=["project_impact","objective","work_package","task","deliverable","milestone"]
+                    cur_lev=k.get("kpi_level","project_impact")
+                    e_klevel=st.selectbox("Level", level_opts,
+                        index=level_opts.index(cur_lev) if cur_lev in level_opts else 0)
+                with ekc2: e_kunit=st.selectbox("Unit", KPI_UNITS,
+                        index=KPI_UNITS.index(k.get("unit","number")) if k.get("unit") in KPI_UNITS else 0)
+                with ekc3: e_kmonth=st.number_input("Target Month", min_value=1, max_value=120,
+                        value=int(k.get("target_month",12) or 12))
+                ekv1,ekv2 = st.columns(2)
+                with ekv1: e_kbase   = st.text_input("Baseline", value=str(k.get("baseline_value","0")))
+                with ekv2: e_ktarget = st.text_input("Target",   value=str(k.get("target_value","")))
+                e_kmethod = st.text_input("Measurement Method", value=k.get("measurement_method",""))
+                e_kverif  = st.text_input("Verification Source", value=k.get("verification_source",""))
+                sc1,sc2 = st.columns(2)
+                with sc1:
+                    if st.form_submit_button("💾 Save", type="primary", use_container_width=True):
+                        ok5, _ = upsert_kpi({
+                            "kpi_id": kid, "proposal_id": proposal_id,
+                            "kpi_number": e_knum.strip(), "kpi_title": e_ktitle.strip(),
+                            "kpi_description": e_kdesc.strip(), "kpi_type": "short_term",
+                            "kpi_level": e_klevel, "unit": e_kunit,
+                            "target_month": e_kmonth, "baseline_value": e_kbase.strip(),
+                            "target_value": e_ktarget.strip(),
+                            "measurement_method": e_kmethod.strip(),
+                            "verification_source": e_kverif.strip(),
+                        })
+                        if ok5: st.success("Saved!"); st.rerun()
+                with sc2:
+                    if st.form_submit_button("🗑 Delete", use_container_width=True):
+                        delete_kpi(kid); st.rerun()
 
 # ══════════════════════════════════════════════════════════════════════════════
 # LONG-TERM KPIs
@@ -208,22 +236,46 @@ with tab_long:
 
     for k in kpis_long:
         kid  = k["kpi_id"]
-        warn = D["warning"]; muted = D["muted"]; txt = D["text"]
-        bg2  = D["bg2"]; border = D["border"]
-        st.markdown(
-            f"<div style='background:{bg2};border:1px solid {border};"
-            f"border-left:4px solid {warn};border-radius:10px;"
-            f"padding:0.8rem 1rem;margin-bottom:0.4rem'>"
-            f"<strong style='color:{warn}'>{k['kpi_number']}</strong> "
-            f"<strong style='color:{txt}'>{k.get('kpi_title','')}</strong>"
-            f"<span style='color:{muted};font-size:0.78rem'> · "
-            f"Year +{k.get('post_project_year','?')} after project · "
-            f"Target: {k.get('target_value','')} {k.get('unit','')}</span>"
-            f"</div>",
-            unsafe_allow_html=True
-        )
-        if st.button(f"🗑 Delete {k['kpi_number']}", key=f"dkpi_l_{kid}"):
-            delete_kpi(kid); st.rerun()
+        knum = k.get("kpi_number","")
+        warn = D["warning"]
+
+        with st.expander(
+            f"🔭 {knum}: {k.get('kpi_title','')}  ·  "
+            f"Year +{k.get('post_project_year','?')} · Target {k.get('target_value','')} {k.get('unit','')}",
+            expanded=False
+        ):
+            with st.form(f"edit_kpi_l_{kid}"):
+                lk1,lk2 = st.columns([1,4])
+                with lk1: e_lknum   = st.text_input("KPI #", value=knum)
+                with lk2: e_lktitle = st.text_input("Title", value=k.get("kpi_title",""))
+                e_lkdesc = st.text_area("Description", value=k.get("kpi_description",""), height=60)
+                ll1,ll2,ll3,ll4 = st.columns(4)
+                with ll1: e_lkunit  = st.selectbox("Unit", KPI_UNITS,
+                        index=KPI_UNITS.index(k.get("unit","number")) if k.get("unit") in KPI_UNITS else 0,
+                        key=f"lku_{kid}")
+                with ll2: e_lkyr    = st.selectbox("Post-Project Year", [1,2,3,5,10],
+                        index=[1,2,3,5,10].index(k.get("post_project_year",1)) if k.get("post_project_year") in [1,2,3,5,10] else 0,
+                        key=f"lky_{kid}")
+                with ll3: e_lkbase  = st.text_input("Baseline", value=str(k.get("baseline_value","0")))
+                with ll4: e_lktarget= st.text_input("Target",   value=str(k.get("target_value","")))
+                e_lkmethod = st.text_input("Measurement Method", value=k.get("measurement_method",""))
+                lsc1,lsc2 = st.columns(2)
+                with lsc1:
+                    if st.form_submit_button("💾 Save", type="primary", use_container_width=True):
+                        ok6, _ = upsert_kpi({
+                            "kpi_id": kid, "proposal_id": proposal_id,
+                            "kpi_number": e_lknum.strip(), "kpi_title": e_lktitle.strip(),
+                            "kpi_description": e_lkdesc.strip(), "kpi_type": "long_term",
+                            "kpi_level": "project_impact", "unit": e_lkunit,
+                            "post_project_year": e_lkyr,
+                            "baseline_value": e_lkbase.strip(),
+                            "target_value": e_lktarget.strip(),
+                            "measurement_method": e_lkmethod.strip(),
+                        })
+                        if ok6: st.success("Saved!"); st.rerun()
+                with lsc2:
+                    if st.form_submit_button("🗑 Delete", use_container_width=True):
+                        delete_kpi(kid); st.rerun()
 
 # ── Gantt ─────────────────────────────────────────────────────────────────────
 gantt_data = get_gantt_data(proposal_id)
