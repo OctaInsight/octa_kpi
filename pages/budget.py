@@ -7,7 +7,7 @@ from modules.database import (
     get_work_packages, get_all_partners, get_budget_entries,
     upsert_budget_entry, get_personnel_costs, upsert_personnel_cost,
     delete_personnel_cost, get_overhead_settings, upsert_overhead_settings,
-    get_budget_summary, get_gantt_data,
+    get_budget_summary, get_gantt_data, get_proposal_partners,
 )
 from modules.gantt import render_gantt
 from config import BUDGET_LABELS, DARK as D
@@ -28,7 +28,8 @@ page_header("Budget Designer", f"Proposal: {proposal_id}", "💶")
 if st.button("← Home"): st.switch_page("app.py")
 
 wps          = get_work_packages(proposal_id)
-all_partners = get_all_partners()
+prop_partners = get_proposal_partners(proposal_id)
+all_partners  = prop_partners if prop_partners else get_all_partners()
 
 if not wps:
     st.info("Add Work Packages first before entering budget data.")
