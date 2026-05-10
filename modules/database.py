@@ -489,14 +489,103 @@ def get_gantt_data(proposal_id: str) -> dict:
     }
 
 def get_full_structure(proposal_id: str) -> dict:
-    """Load everything for export."""
+    """Load everything for export, including risks with WP labels resolved."""
+    wps  = get_work_packages(proposal_id)
+    wp_map = {w["wp_id"]: w.get("wp_number","") for w in wps}
+    risks = get_risks(proposal_id)
+    # Pre-resolve WP labels onto each risk for export
+    for r in risks:
+        linked = get_risk_wps(r["risk_id"])
+        r["_wp_labels"] = ", ".join(wp_map.get(wid,"") for wid in linked if wid in wp_map)
     return {
         "proposal":      get_proposal(proposal_id),
         "objectives":    get_objectives(proposal_id),
-        "work_packages": get_work_packages(proposal_id),
+        "work_packages": wps,
         "tasks":         get_tasks(proposal_id),
         "deliverables":  get_deliverables(proposal_id),
         "milestones":    get_milestones(proposal_id),
         "kpis_short":    get_kpis(proposal_id, "short_term"),
         "kpis_long":     get_kpis(proposal_id, "long_term"),
+        "risks":         risks,
     }
+
+
+# ── Risk Management ───────────────────────────────────────────────────────────
+
+def _compute_risk_level(likelihood: str, severity: str) -> str:
+    """
+    Risk matrix:
+              | High Sev | Med Sev | Low Sev
+    High Lik  | critical |  high   | medium
+    Med  Lik  |   high   | medium  |  low
+    Low  Lik  |  medium  |   low   |  low
+    """
+    matrix = {
+        ("high",   "high"):   "critical",
+        ("high",   "medium"): "high",
+        ("high",   "low"):    "medium",
+        ("medium", "high"):   "high",
+        ("medium", "medium"): "medium",
+        ("medium", "low"):    "low",
+        ("low",    "high"):   "medium",
+        ("low",    "medium"): "low",
+        ("low",    "low"):    "low",
+    }
+    return matrix.get((likelihood.lower(), severity.lower()), "medium")
+
+
+def get_risks(proposal_id: str) -> list:
+    try:
+        return db().table("risks").select("*") \
+                   .eq("proposal_id", proposal_id) \
+                   .order("sort_order").order("risk_number").execute().data or []
+    except Exception:
+        return []
+
+
+def get_risk_wps(risk_id: int) -> list:
+    """Returns list of wp_ids linked to a risk."""
+    try:
+        r = db().table("risk_work_packages").select("wp_id") \
+                .eq("risk_id", risk_id).execute()
+        return [row["wp_id"] for row in (r.data or [])]
+    except Exception:
+        return []
+
+
+def upsert_risk(data: dict) -> tuple:
+    try:
+        # Auto-compute risk level
+        data["risk_level"] = _compute_risk_level(
+            data.get("likelihood", "medium"),
+            data.get("severity",   "medium"),
+        )
+        data["updated_at"] = _now()
+        if data.get("risk_id"):
+            rid = data.pop("risk_id")
+            db().table("risks").update(data).eq("risk_id", rid).execute()
+            return True, rid
+        r = db().table("risks").insert(data).execute()
+        return True, r.data[0]["risk_id"] if r.data else None
+    except Exception as e:
+        return False, str(e)
+
+
+def delete_risk(risk_id: int) -> bool:
+    try:
+        db().table("risks").delete().eq("risk_id", risk_id).execute()
+        return True
+    except Exception:
+        return False
+
+
+def set_risk_wps(risk_id: int, wp_ids: list) -> bool:
+    try:
+        db().table("risk_work_packages").delete().eq("risk_id", risk_id).execute()
+        if wp_ids:
+            db().table("risk_work_packages").insert(
+                [{"risk_id": risk_id, "wp_id": wid} for wid in wp_ids]
+            ).execute()
+        return True
+    except Exception:
+        return False
