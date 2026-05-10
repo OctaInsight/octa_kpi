@@ -6,7 +6,8 @@ import streamlit as st
 from modules.auth import require_auth
 from modules.sso import auto_login_from_url, set_token_in_url, get_token_from_url
 from modules.ui_helpers import inject_css, sidebar_nav, page_header, section_label, DARK
-from modules.database import get_all_proposals, get_gantt_data, get_objectives, get_kpis
+from modules.database import (get_all_proposals, get_proposals_for_user,
+                              get_gantt_data, get_objectives, get_kpis)
 from modules.gantt import render_gantt
 
 st.set_page_config(page_title=f"Octa Work Plan Designer",
@@ -25,10 +26,37 @@ page_header("Objectives & Work Plan Designer",
             "Select a proposal to design its work plan structure, KPIs and budget",
             "📊")
 
-proposals = get_all_proposals()
+is_admin = st.session_state.get("role") == "admin"
+org      = st.session_state.get("organisation","")
+
+proposals = get_proposals_for_user(organisation=org, is_admin=is_admin)
+
 if not proposals:
-    st.warning("No proposals found. Create proposals in the Proposal Tracking app first.")
+    if is_admin:
+        st.warning("No proposals found. Create proposals in the Proposal Tracking app first.")
+    else:
+        acc = DARK["accent"]
+        st.markdown(
+            f"<div style='background:{DARK["bg2"]};border-left:4px solid {acc};"
+            f"border-radius:10px;padding:1rem 1.2rem'>"
+            f"<strong style='color:{acc}'>No proposals found for your organisation</strong><br>"
+            f"<span style='color:{DARK["muted"]};font-size:0.88rem'>"
+            f"Only proposals where <strong>{org}</strong> is listed as coordinator "
+            f"or partner are visible to you. Contact an admin if you need access to "
+            f"additional proposals.</span></div>",
+            unsafe_allow_html=True
+        )
     st.stop()
+
+if not is_admin and org:
+    muted = DARK["muted"]; acc = DARK["accent"]
+    st.markdown(
+        f"<p style='color:{muted};font-size:0.8rem'>"
+        f"Showing <strong style='color:{DARK["text"]}'>{len(proposals)}</strong> "
+        f"proposal(s) where <strong style='color:{acc}'>{org}</strong> "
+        f"is a partner or coordinator.</p>",
+        unsafe_allow_html=True
+    )
 
 # ── Proposal selector ─────────────────────────────────────────────────────────
 D = DARK
