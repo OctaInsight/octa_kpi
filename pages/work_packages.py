@@ -11,7 +11,7 @@ from modules.database import (
     get_task_partners, set_task_partners,
     get_deliverables, upsert_deliverable, delete_deliverable,
     get_milestones, upsert_milestone, delete_milestone,
-    get_all_partners,
+    get_all_partners, get_proposal_partners,
 )
 from modules.gantt import render_gantt
 from config import (DELIVERABLE_TYPES, DISSEMINATION_LEVELS,
@@ -30,13 +30,17 @@ if not proposal_id:
 page_header("Work Packages", f"Proposal: {proposal_id}", "📦")
 if st.button("← Home"): st.switch_page("app.py")
 
-user_id    = st.session_state.get("user_id")
-all_partners = get_all_partners()
-objectives   = get_objectives(proposal_id)
-wps          = get_work_packages(proposal_id)
+user_id = st.session_state.get("user_id")
+# Load partners from the proposal (coordinator + partners_list)
+prop_partners = get_proposal_partners(proposal_id)
+all_partners  = prop_partners if prop_partners else get_all_partners()
+objectives    = get_objectives(proposal_id)
+wps           = get_work_packages(proposal_id)
 
-partner_opts = {f"{p.get('short_name','')} — {p.get('full_name','')}": p["id"]
-                for p in all_partners}
+partner_opts = {
+    f"{p.get('short_name','') or p.get('full_name','')[:20]} — {p.get('full_name','')[:35]}": p["id"]
+    for p in all_partners
+}
 obj_opts     = {f"{o['objective_number']}: {o['objective_title'][:40]}": o["objective_id"]
                 for o in objectives}
 
@@ -76,6 +80,18 @@ with st.expander("Work Package Form", expanded=not wps or bool(edit_wid)):
                               key="wp_lead")
     lead_id   = lead_opts[sel_lead]
 
+    # Involved partners (multiselect)
+    cur_wp_partners = get_wp_partners(edit_wid) if edit_wid else []
+    cur_involved_ids= [r.get("partner_id") for r in cur_wp_partners
+                       if r.get("role") != "lead"]
+    sel_involved = st.multiselect(
+        "Involved Partners (contributors)",
+        options=list(partner_opts.keys()),
+        default=[l for l,v in partner_opts.items() if v in cur_involved_ids],
+        key="wp_involved",
+        help="Select all partners contributing to this WP"
+    )
+
     # Link to objectives
     cur_obj_ids = get_wp_objectives(edit_wid) if edit_wid else []
     cur_obj_sel = [l for l,oid in obj_opts.items() if oid in cur_obj_ids]
@@ -102,6 +118,15 @@ with st.expander("Work Package Form", expanded=not wps or bool(edit_wid)):
             ok, wid = upsert_work_package(data)
             if ok:
                 set_wp_objectives(wid, [obj_opts[l] for l in sel_objs])
+                # Save partners: lead + involved
+                partners_to_save = []
+                if lead_id:
+                    partners_to_save.append({"partner_id": lead_id, "role": "lead"})
+                for lbl in sel_involved:
+                    pid = partner_opts.get(lbl)
+                    if pid and pid != lead_id:
+                        partners_to_save.append({"partner_id": pid, "role": "contributor"})
+                set_wp_partners(wid, partners_to_save)
                 st.success("✅ WP saved!")
                 st.session_state.pop("edit_wp_id", None)
                 st.rerun()
@@ -162,12 +187,18 @@ for wp in sorted(wps, key=lambda x: x.get("wp_number","")):
                 t_lead_sel = st.selectbox("Lead Partner", ["— None —"]+list(partner_opts.keys()),
                                            key=f"t_lead_{wp_id}")
                 t_lead_id  = partner_opts.get(t_lead_sel)
+                t_involved = st.multiselect(
+                    "Involved Partners",
+                    options=list(partner_opts.keys()),
+                    key=f"t_involved_{wp_id}",
+                    help="Partners contributing to this task"
+                )
 
                 if st.form_submit_button("➕ Add Task", type="primary"):
                     if not t_title.strip():
                         st.error("Title required.")
                     else:
-                        ok, _ = upsert_task({
+                        ok, tid = upsert_task({
                             "proposal_id": proposal_id, "wp_id": wp_id,
                             "task_number": t_num.strip() or f"T-{wp['wp_number']}.x",
                             "task_title":  t_title.strip(),
@@ -175,7 +206,17 @@ for wp in sorted(wps, key=lambda x: x.get("wp_number","")):
                             "start_month": t_sm, "end_month": t_em,
                             "task_lead_partner_id": t_lead_id,
                         })
-                        if ok: st.success("Task added!"); st.rerun()
+                        if ok and tid:
+                            task_partners_to_save = []
+                            if t_lead_id:
+                                task_partners_to_save.append({"partner_id": t_lead_id, "role": "lead"})
+                            for lbl in t_involved:
+                                pid2 = partner_opts.get(lbl)
+                                if pid2 and pid2 != t_lead_id:
+                                    task_partners_to_save.append({"partner_id": pid2, "role": "contributor"})
+                            if task_partners_to_save:
+                                set_task_partners(tid, task_partners_to_save)
+                            st.success("Task added!"); st.rerun()
 
             for t in wp_tasks:
                 tid = t["task_id"]
