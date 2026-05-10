@@ -6,7 +6,7 @@ from modules.ui_helpers import inject_css, sidebar_nav, page_header, section_lab
 from modules.database import get_full_structure, get_gantt_data, get_proposal
 from modules.export import (export_deliverables_docx, export_milestones_docx,
                              export_kpis_docx, export_full_docx)
-from modules.gantt import build_gantt_matplotlib, build_gantt_pdf
+from modules.gantt import build_gantt_svg, build_gantt_pdf, build_gantt_eps
 
 st.set_page_config(page_title="Export — Octa", page_icon="📥",
                    layout="wide", initial_sidebar_state="expanded")
@@ -121,7 +121,7 @@ else:
     gantt_title = f"{acronym} — Project Gantt Chart"
     dur_adj     = st.slider("Project duration (months)", 12, 72, duration, 6)
 
-    gc1, gc2 = st.columns(2)
+    gc1, gc2, gc3 = st.columns(3)
 
     with gc1:
         bg2 = D["bg2"]; border = D["border"]
@@ -138,7 +138,7 @@ else:
         if st.button("Generate SVG Gantt", type="primary",
                      use_container_width=True, key="gantt_svg"):
             with st.spinner("Rendering Gantt chart as SVG…"):
-                svg_bytes = build_gantt_matplotlib(gantt_data, gantt_title, dur_adj)
+                svg_bytes = build_gantt_svg(gantt_data, gantt_title, dur_adj)
             if svg_bytes:
                 st.download_button(
                     "📥 Download Gantt.svg",
@@ -176,6 +176,32 @@ else:
                 st.success("✅ PDF ready.")
             else:
                 st.error("Could not generate PDF.")
+
+    with gc3:
+        st.markdown(
+            f"<div style='background:{bg2};border:1px solid {border};"
+            f"border-left:4px solid {D['success']};border-radius:10px;padding:1rem'>"
+            f"<strong style='color:{D['text']}'>🖊️ EPS — CorelDraw & Illustrator</strong><br>"
+            f"<span style='color:{muted_c};font-size:0.82rem'>"
+            f"Best for CorelDraw, Adobe Illustrator and professional print.<br>"
+            f"Pure vector format — every object fully editable.</span>"
+            f"</div>",
+            unsafe_allow_html=True
+        )
+        if st.button("Generate EPS Gantt", use_container_width=True, key="gantt_eps"):
+            with st.spinner("Rendering Gantt chart as EPS…"):
+                eps_bytes = build_gantt_eps(gantt_data, gantt_title, dur_adj)
+            if eps_bytes:
+                st.download_button(
+                    "📥 Download Gantt.eps",
+                    data=eps_bytes,
+                    file_name=f"{acronym}_Gantt.eps",
+                    mime="application/postscript",
+                    key="dl_eps"
+                )
+                st.success("✅ EPS ready — open in CorelDraw or Illustrator.")
+            else:
+                st.error("Could not generate EPS.")
 
     # Preview
     section_label("👁 Gantt Preview")
