@@ -6,7 +6,7 @@ from modules.ui_helpers import inject_css, sidebar_nav, page_header, section_lab
 from modules.database import get_full_structure, get_gantt_data, get_proposal
 from modules.export import (export_deliverables_docx, export_milestones_docx,
                              export_kpis_docx, export_full_docx)
-from modules.gantt import build_gantt_svg, build_gantt_pdf, build_gantt_eps
+from modules.gantt import build_gantt_svg, build_gantt_pdf, build_gantt_eps, build_gantt_html
 
 st.set_page_config(page_title="Export — Octa", page_icon="📥",
                    layout="wide", initial_sidebar_state="expanded")
@@ -121,7 +121,7 @@ else:
     gantt_title = f"{acronym} — Project Gantt Chart"
     dur_adj     = st.slider("Project duration (months)", 12, 72, duration, 6)
 
-    gc1, gc2, gc3 = st.columns(3)
+    gc1, gc2, gc3, gc4 = st.columns(4)
 
     with gc1:
         bg2 = D["bg2"]; border = D["border"]
@@ -202,6 +202,32 @@ else:
                 st.success("✅ EPS ready — open in CorelDraw or Illustrator.")
             else:
                 st.error("Could not generate EPS.")
+
+    with gc4:
+        st.markdown(
+            f"<div style='background:{bg2};border:1px solid {border};"
+            f"border-left:4px solid {D['accent']};border-radius:10px;padding:1rem'>"
+            f"<strong style='color:{D['text']}'>🌐 HTML — Interactive</strong><br>"
+            f"<span style='color:{muted_c};font-size:0.82rem'>"
+            f"Fully interactive Gantt — zoom, pan, hover in any browser.<br>"
+            f"Self-contained file, no internet required. Share as-is.</span>"
+            f"</div>",
+            unsafe_allow_html=True
+        )
+        if st.button("Generate HTML Gantt", use_container_width=True, key="gantt_html"):
+            with st.spinner("Building interactive HTML…"):
+                html_bytes = build_gantt_html(gantt_data, gantt_title, dur_adj)
+            if html_bytes:
+                st.download_button(
+                    "📥 Download Gantt.html",
+                    data=html_bytes,
+                    file_name=f"{acronym}_Gantt.html",
+                    mime="text/html",
+                    key="dl_html"
+                )
+                st.success("✅ HTML ready — open in any browser.")
+            else:
+                st.error("Could not generate HTML.")
 
     # Preview
     section_label("👁 Gantt Preview")
