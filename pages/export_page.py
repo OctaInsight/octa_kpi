@@ -5,8 +5,11 @@ from modules.sso import auto_login_from_url
 from modules.ui_helpers import inject_css, sidebar_nav, page_header, section_label, DARK
 from modules.database import get_full_structure, get_gantt_data, get_proposal
 from modules.export import (export_deliverables_docx, export_milestones_docx,
-                             export_kpis_docx, export_full_docx, export_risks_docx)
-from modules.database import get_risks, get_risk_wps, get_work_packages
+                             export_kpis_docx, export_full_docx, export_risks_docx,
+                             export_budget_excel)
+from modules.database import (get_risks, get_risk_wps, get_work_packages,
+                               get_budget_entries, get_all_partners,
+                               get_proposal_partners)
 from modules.gantt import build_gantt_svg, build_gantt_pdf, build_gantt_eps
 
 st.set_page_config(page_title="Export — Octa", page_icon="📥",
@@ -130,6 +133,45 @@ with ec5:
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             key="dl_risk"
         )
+
+# ═════════════════════════════════════════════════════════════════════════════
+# BUDGET EXCEL EXPORT
+# ═════════════════════════════════════════════════════════════════════════════
+section_label("💶 Budget Export (.xlsx) — EU Format")
+
+st.markdown(
+    f"<p style='color:{muted_c};font-size:0.84rem'>"
+    f"Exports the full budget as an Excel workbook. "
+    f"<strong>One sheet per partner</strong> with WP breakdown by cost category, "
+    f"WP subtotals, partner summary, and grand total. "
+    f"Includes an <strong>All Partners overview</strong> sheet as the first tab.</p>",
+    unsafe_allow_html=True
+)
+
+if st.button("💶 Generate Budget Excel", type="primary", key="budget_excel"):
+    with st.spinner("Building EU budget workbook…"):
+        budget_entries_data = get_budget_entries(proposal_id)
+        prop_partners = get_proposal_partners(proposal_id)
+        all_partners_data = prop_partners if prop_partners else get_all_partners()
+        wps_for_budget    = get_work_packages(proposal_id)
+        if not budget_entries_data:
+            st.warning("No budget data entered yet. Add budget entries first.")
+        else:
+            excel_bytes = export_budget_excel(
+                proposal, wps_for_budget,
+                budget_entries_data, all_partners_data
+            )
+            n_partners = len(set(e["partner_id"] for e in budget_entries_data if e.get("partner_id")))
+            st.download_button(
+                f"📥 Download {acronym}_Budget.xlsx",
+                data=excel_bytes,
+                file_name=f"{acronym}_Budget.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="dl_budget_excel"
+            )
+            st.success(f"✅ Excel ready — {n_partners} partner sheet(s) + overview tab.")
+
+st.markdown("<br>", unsafe_allow_html=True)
 
 # ═════════════════════════════════════════════════════════════════════════════
 # GANTT CHART EXPORTS
