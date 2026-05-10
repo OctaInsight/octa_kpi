@@ -207,6 +207,8 @@ def sidebar_nav():
 
         if st.button("📊  KPIs",          key="nav_kpi",    use_container_width=True):
             st.switch_page("pages/kpis.py")
+        if st.button("⚠️  Risks",          key="nav_risks",  use_container_width=True):
+            st.switch_page("pages/risks.py")
         if st.button("💶  Budget",        key="nav_budget", use_container_width=True):
             st.switch_page("pages/budget.py")
         if st.button("📥  Export",        key="nav_export", use_container_width=True):
