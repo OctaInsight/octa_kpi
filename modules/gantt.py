@@ -109,20 +109,27 @@ def build_gantt(gantt_data: dict, proposal_id: str,
                 legendgroup=wp["wp_number"],
             ))
 
-    # ── Deliverable markers (diamonds) ────────────────────────────────────────
+    # ── Deliverable markers (diamonds) — on task row if linked, else WP row ────
     del_x, del_y, del_text = [], [], []
+    del_labels = []
     for d in dels:
         dm = d.get("delivery_month")
         if not dm:
             continue
-        wp_id = d.get("wp_id")
-        if wp_id and wp_id in wp_y_map:
+        # Prefer task row
+        tid   = d.get("task_id")
+        y_idx = task_y_map.get(tid) if tid else None
+        if y_idx is None:
+            wp_id = d.get("wp_id")
+            y_idx = wp_y_map.get(wp_id)
+        if y_idx is not None:
             del_x.append(int(dm) - 0.5)
-            del_y.append(y_labels[wp_y_map[wp_id]])
+            del_y.append(y_labels[y_idx])
             del_text.append(
                 f"📄 {d['deliverable_number']}: {d.get('deliverable_title','')}<br>"
                 f"Month {dm} · {d.get('deliverable_type','report')}"
             )
+            del_labels.append(d.get("deliverable_number","D"))
 
     if del_x:
         fig.add_trace(go.Scatter(
@@ -133,7 +140,7 @@ def build_gantt(gantt_data: dict, proposal_id: str,
                 color=DARK["success"],
                 line=dict(color="white", width=1)
             ),
-            text=[d.get("deliverable_number","D") for d in dels if d.get("delivery_month")],
+            text=del_labels,
             textposition="top center",
             textfont=dict(size=8, color=DARK["success"]),
             hovertext=del_text,
@@ -142,20 +149,26 @@ def build_gantt(gantt_data: dict, proposal_id: str,
             showlegend=True,
         ))
 
-    # ── Milestone markers (stars) ─────────────────────────────────────────────
+    # ── Milestone markers (stars) — on task row if linked, else WP row ────────
     ms_x, ms_y, ms_text = [], [], []
+    ms_labels = []
     for m in mss:
         dm = m.get("due_month")
         if not dm:
             continue
-        wp_id = m.get("wp_id")
-        if wp_id and wp_id in wp_y_map:
+        tid   = m.get("task_id")
+        y_idx = task_y_map.get(tid) if tid else None
+        if y_idx is None:
+            wp_id = m.get("wp_id")
+            y_idx = wp_y_map.get(wp_id)
+        if y_idx is not None:
             ms_x.append(int(dm) - 0.5)
-            ms_y.append(y_labels[wp_y_map[wp_id]])
+            ms_y.append(y_labels[y_idx])
             ms_text.append(
                 f"🏁 {m['milestone_number']}: {m.get('milestone_title','')}<br>"
                 f"Due: Month {dm}"
             )
+            ms_labels.append(m.get("milestone_number","MS"))
 
     if ms_x:
         fig.add_trace(go.Scatter(
@@ -166,7 +179,7 @@ def build_gantt(gantt_data: dict, proposal_id: str,
                 color=DARK["warning"],
                 line=dict(color="white", width=1)
             ),
-            text=[m.get("milestone_number","MS") for m in mss if m.get("due_month")],
+            text=ms_labels,
             textposition="bottom center",
             textfont=dict(size=8, color=DARK["warning"]),
             hovertext=ms_text,
@@ -178,7 +191,7 @@ def build_gantt(gantt_data: dict, proposal_id: str,
     # ── Month grid lines ──────────────────────────────────────────────────────
     for m in range(1, total_months + 1, 6):
         fig.add_vline(x=m - 0.5, line_dash="dot",
-                      line_color="rgba(255,255,255,0.1)", line_width=1)
+                      line_color="#ffffff1a", line_width=1)
 
     # ── Layout ────────────────────────────────────────────────────────────────
     row_height = max(30, 500 // max(total_rows, 1))
@@ -317,38 +330,53 @@ def build_gantt_matplotlib(gantt_data: dict, title: str = "Project Gantt Chart",
                     color="white", fontweight="bold" if rtype=="wp" else "normal")
 
         # Deliverable markers
+        # Build lookup: task_id → row_idx, wp_id → row_idx
+        task_row_map = {}
+        wp_row_map   = {}
+        for idx, row in enumerate(rows):
+            label, sm, em, color, rtype = row
+            if rtype == "task":
+                # Find task_id from label
+                for t in tasks:
+                    if label.strip().startswith(t.get("task_number","")):
+                        task_row_map[t["task_id"]] = idx
+                        break
+            elif rtype == "wp":
+                for w in wps:
+                    if label.startswith(f"{w['wp_number']}:"):
+                        wp_row_map[w["wp_id"]] = idx
+                        break
+
         for d in dels:
             dm = d.get("delivery_month")
             if not dm: continue
-            wp_id = d.get("wp_id")
-            row_label = next((f"{w['wp_number']}: {w.get('wp_title','')[:30]}"
-                              for w in wps if w["wp_id"]==wp_id), None)
-            if row_label:
-                row_idx = next((i for i, r in enumerate(rows) if r[0]==row_label), None)
-                if row_idx is not None:
-                    y = n_rows - row_idx - 1
-                    ax.plot(int(dm)-0.5, y+0.35, "D",
-                            color="#6fcf97", markersize=6, zorder=5)
-                    ax.text(int(dm)-0.5, y+0.55,
-                            d.get("deliverable_number","D"),
-                            ha="center", fontsize=6, color="#6fcf97")
+            # Prefer task row, fall back to WP row
+            tid    = d.get("task_id")
+            row_idx= task_row_map.get(tid) if tid else None
+            if row_idx is None:
+                row_idx = wp_row_map.get(d.get("wp_id"))
+            if row_idx is not None:
+                y = n_rows - row_idx - 1
+                ax.plot(int(dm)-0.5, y+0.3, "D",
+                        color="#6fcf97", markersize=7, zorder=5)
+                ax.text(int(dm)-0.5, y+0.52,
+                        d.get("deliverable_number","D"),
+                        ha="center", fontsize=6, color="#6fcf97", fontweight="bold")
 
-        # Milestone markers
         for m in mss:
             dm = m.get("due_month")
             if not dm: continue
-            wp_id = m.get("wp_id")
-            row_label = next((f"{w['wp_number']}: {w.get('wp_title','')[:30]}"
-                              for w in wps if w["wp_id"]==wp_id), None)
-            if row_label:
-                row_idx = next((i for i, r in enumerate(rows) if r[0]==row_label), None)
-                if row_idx is not None:
-                    y = n_rows - row_idx - 1
-                    ax.plot(int(dm)-0.5, y-0.35, "*",
-                            color="#f6cc52", markersize=8, zorder=5)
-                    ax.text(int(dm)-0.5, y-0.6,
-                            m.get("milestone_number","MS"),
-                            ha="center", fontsize=6, color="#f6cc52")
+            tid    = m.get("task_id")
+            row_idx= task_row_map.get(tid) if tid else None
+            if row_idx is None:
+                row_idx = wp_row_map.get(m.get("wp_id"))
+            if row_idx is not None:
+                y = n_rows - row_idx - 1
+                ax.plot(int(dm)-0.5, y-0.3, "*",
+                        color="#f6cc52", markersize=9, zorder=5)
+                ax.text(int(dm)-0.5, y-0.55,
+                        m.get("milestone_number","MS"),
+                        ha="center", fontsize=6, color="#f6cc52", fontweight="bold")
 
         # Axes
         ax.set_xlim(0, max_month)
@@ -365,7 +393,7 @@ def build_gantt_matplotlib(gantt_data: dict, title: str = "Project Gantt Chart",
             spine.set_edgecolor("#2d4a7a")
 
         ax.set_title(title, color="white", fontsize=11, fontweight="bold", pad=10)
-        ax.grid(axis="x", color="rgba(255,255,255,0.1)",
+        ax.grid(axis="x", color="#ffffff1a",
                 linestyle="--", linewidth=0.5)
 
         # Legend
