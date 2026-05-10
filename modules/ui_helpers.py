@@ -164,7 +164,6 @@ def sidebar_nav():
                 unsafe_allow_html=True
             )
 
-        # Proposal indicator
         if proposal_id:
             acc = DARK["accent"]
             st.markdown(
@@ -176,45 +175,62 @@ def sidebar_nav():
 
         _hr()
 
-        # ── Frame 1: Design ───────────────────────────────────────────────────
+        # ── Frame 1: Design (with grouped sub-items) ──────────────────────────
         _nav_section("Design")
-        if st.button("🏠  Overview",        key="nav_home",  use_container_width=True):
+        if st.button("🏠  Overview",      key="nav_home",   use_container_width=True):
             st.switch_page("app.py")
-        if st.button("🎯  Objectives",      key="nav_obj",   use_container_width=True):
+        if st.button("🎯  Objectives",    key="nav_obj",    use_container_width=True):
             st.switch_page("pages/objectives.py")
-        if st.button("📦  Work Packages",   key="nav_wp",    use_container_width=True):
+
+        # WP group
+        if st.button("📦  Work Packages", key="nav_wp",     use_container_width=True):
+            st.session_state.pop("wp_sub_tab", None)
             st.switch_page("pages/work_packages.py")
-        if st.button("📊  KPIs",            key="nav_kpi",   use_container_width=True):
+
+        # Grouped sub-buttons under WP (indented)
+        acc = DARK["accent"]; bg3 = DARK["bg3"]
+        st.markdown(
+            f"<div style='margin-left:12px;padding-left:8px;"
+            f"border-left:2px solid {acc}44'>",
+            unsafe_allow_html=True
+        )
+        if st.button("⚙️  Tasks",         key="nav_tasks_wp", use_container_width=True):
+            st.session_state["wp_sub_tab"] = "tasks"
+            st.switch_page("pages/work_packages.py")
+        if st.button("📄  Deliverables",  key="nav_dels",    use_container_width=True):
+            st.session_state["wp_sub_tab"] = "deliverables"
+            st.switch_page("pages/work_packages.py")
+        if st.button("🏁  Milestones",    key="nav_ms",      use_container_width=True):
+            st.session_state["wp_sub_tab"] = "milestones"
+            st.switch_page("pages/work_packages.py")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        if st.button("📊  KPIs",          key="nav_kpi",    use_container_width=True):
             st.switch_page("pages/kpis.py")
-        if st.button("💶  Budget",          key="nav_budget",use_container_width=True):
+        if st.button("💶  Budget",        key="nav_budget", use_container_width=True):
             st.switch_page("pages/budget.py")
+        if st.button("📥  Export",        key="nav_export", use_container_width=True):
+            st.switch_page("pages/export_page.py")
 
         _hr()
 
         # ── Frame 2: Tasks ────────────────────────────────────────────────────
         _nav_section("Tasks")
-        if st.button("📌  Assign Task", key="nav_assign", use_container_width=True):
+        if st.button("📌  Assign Task",   key="nav_assign", use_container_width=True):
             st.switch_page("pages/assign_task.py")
-        if st.button("✅  My Tasks",    key="nav_tasks",  use_container_width=True):
+        if st.button("✅  My Tasks",      key="nav_my_tasks",use_container_width=True):
             st.switch_page("pages/my_tasks.py")
 
         _hr()
 
-        # ── Frame 3: Export ───────────────────────────────────────────────────
-        _nav_section("Export")
-        if st.button("📥  Export",      key="nav_export", use_container_width=True):
-            st.switch_page("pages/export_page.py")
-
-        _hr()
-
-        # ── Frame 4: Admin ────────────────────────────────────────────────────
+        # ── Frame 3: Admin ────────────────────────────────────────────────────
         if is_admin_user:
             _nav_section("Administration")
             if st.button("🛡️  Admin Panel", key="nav_admin", use_container_width=True):
                 st.switch_page("pages/admin.py")
             _hr()
 
-        # ── Frame 5: Account ──────────────────────────────────────────────────
+        # ── Frame 4: Account ──────────────────────────────────────────────────
         _nav_section("Account")
         if is_auth:
             if st.button("🚪  Sign Out", use_container_width=True, key="nav_signout"):
