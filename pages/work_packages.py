@@ -30,6 +30,9 @@ if not proposal_id:
 page_header("Work Packages", f"Proposal: {proposal_id}", "📦")
 if st.button("← Home"): st.switch_page("app.py")
 
+# Which sub-section to highlight based on sidebar click
+wp_sub_tab = st.session_state.pop("wp_sub_tab", None)
+
 user_id = st.session_state.get("user_id")
 # Load partners from the proposal (coordinator + partners_list)
 prop_partners = get_proposal_partners(proposal_id)
@@ -219,20 +222,72 @@ for wp in sorted(wps, key=lambda x: x.get("wp_number","")):
                             st.success("Task added!"); st.rerun()
 
             for t in wp_tasks:
-                tid = t["task_id"]
-                muted = D["muted"]; txt = D["text"]
-                st.markdown(
-                    f"<div style='background:{D["bg3"]};border-radius:8px;"
-                    f"padding:0.5rem 0.8rem;margin-bottom:0.3rem'>"
-                    f"<strong style='color:{D["accent"]}'>{t['task_number']}</strong> "
-                    f"<span style='color:{txt}'>{t.get('task_title','')}</span> "
-                    f"<span style='color:{muted};font-size:0.78rem'>"
-                    f"M{t.get('start_month','?')}–M{t.get('end_month','?')}</span>"
-                    f"</div>",
-                    unsafe_allow_html=True
-                )
-                if st.button(f"🗑 Delete {t['task_number']}", key=f"dt_{tid}"):
-                    delete_task(tid); st.rerun()
+                tid   = t["task_id"]
+                tnum  = t.get("task_number","")
+                ttitle= t.get("task_title","")
+                with st.expander(
+                    f"⚙️ {tnum}: {ttitle}  ·  M{t.get('start_month','?')}–M{t.get('end_month','?')}",
+                    expanded=False
+                ):
+                    with st.form(f"edit_task_{tid}"):
+                        et1, et2 = st.columns([1, 4])
+                        with et1:
+                            e_tnum = st.text_input("Task #", value=tnum)
+                        with et2:
+                            e_ttitle = st.text_input("Title", value=ttitle)
+                        e_tdesc = st.text_area("Description",
+                            value=t.get("task_description",""), height=60)
+                        etm1, etm2 = st.columns(2)
+                        with etm1:
+                            e_tsm = st.number_input("Start Month", min_value=1,
+                                max_value=120, value=int(t.get("start_month",1) or 1))
+                        with etm2:
+                            e_tem = st.number_input("End Month", min_value=1,
+                                max_value=120, value=int(t.get("end_month",12) or 12))
+                        # Lead partner
+                        lead_list_e = ["— None —"] + list(partner_opts.keys())
+                        cur_tlead   = t.get("task_lead_partner_id")
+                        tlead_def   = next((l for l,v in partner_opts.items() if v==cur_tlead), "— None —")
+                        tlead_idx   = lead_list_e.index(tlead_def) if tlead_def in lead_list_e else 0
+                        e_tlead_sel = st.selectbox("Lead Partner", lead_list_e,
+                            index=tlead_idx, key=f"etlead_{tid}")
+                        e_tlead_id  = partner_opts.get(e_tlead_sel)
+                        # Involved partners
+                        cur_tp      = get_task_partners(tid)
+                        cur_tp_ids  = [r.get("partner_id") for r in cur_tp if r.get("role") != "lead"]
+                        e_tinv      = st.multiselect("Involved Partners",
+                            list(partner_opts.keys()),
+                            default=[l for l,v in partner_opts.items() if v in cur_tp_ids],
+                            key=f"etinv_{tid}")
+                        sc1, sc2 = st.columns(2)
+                        with sc1:
+                            if st.form_submit_button("💾 Save", type="primary",
+                                                      use_container_width=True):
+                                ok2, _ = upsert_task({
+                                    "task_id": tid, "proposal_id": proposal_id,
+                                    "wp_id": wp_id,
+                                    "task_number":      e_tnum.strip(),
+                                    "task_title":       e_ttitle.strip(),
+                                    "task_description": e_tdesc.strip(),
+                                    "start_month": e_tsm, "end_month": e_tem,
+                                    "task_lead_partner_id": e_tlead_id,
+                                })
+                                if ok2:
+                                    tp_save = []
+                                    if e_tlead_id:
+                                        tp_save.append({"partner_id": e_tlead_id, "role": "lead"})
+                                    for lbl in e_tinv:
+                                        p_id = partner_opts.get(lbl)
+                                        if p_id and p_id != e_tlead_id:
+                                            tp_save.append({"partner_id": p_id, "role": "contributor"})
+                                    set_task_partners(tid, tp_save)
+                                    st.success("✅ Task saved!"); st.rerun()
+                                else:
+                                    st.error("Save failed.")
+                        with sc2:
+                            if st.form_submit_button("🗑 Delete",
+                                                      use_container_width=True):
+                                delete_task(tid); st.rerun()
 
         # ── DELIVERABLES ──────────────────────────────────────────────────────
         with sub_tab2:
@@ -279,20 +334,67 @@ for wp in sorted(wps, key=lambda x: x.get("wp_number","")):
 
             for d in wp_dels:
                 did   = d["deliverable_id"]
-                muted = D["muted"]; acc = D["accent"]; suc = D["success"]
-                st.markdown(
-                    f"<div style='background:{D["bg3"]};border-radius:8px;"
-                    f"padding:0.5rem 0.8rem;margin-bottom:0.3rem'>"
-                    f"<span style='color:{suc}'>◆</span> "
-                    f"<strong style='color:{acc}'>{d['deliverable_number']}</strong> "
-                    f"<span style='color:{D["text"]}'>{d.get('deliverable_title','')}</span> "
-                    f"<span style='color:{muted};font-size:0.78rem'>"
-                    f"Month {d.get('delivery_month','?')} · {d.get('deliverable_type','')}</span>"
-                    f"</div>",
-                    unsafe_allow_html=True
-                )
-                if st.button(f"🗑 Delete {d['deliverable_number']}", key=f"dd_{did}"):
-                    delete_deliverable(did); st.rerun()
+                dnum  = d.get("deliverable_number","")
+                with st.expander(
+                    f"◆ {dnum}: {d.get('deliverable_title','')}  ·  Month {d.get('delivery_month','?')}",
+                    expanded=False
+                ):
+                    with st.form(f"edit_del_{did}"):
+                        ed1, ed2 = st.columns([1, 4])
+                        with ed1:
+                            e_dnum   = st.text_input("Del. #", value=dnum)
+                        with ed2:
+                            e_dtitle = st.text_input("Title", value=d.get("deliverable_title",""))
+                        e_ddesc = st.text_area("Description",
+                            value=d.get("deliverable_description",""), height=60)
+                        edd1, edd2, edd3 = st.columns(3)
+                        with edd1:
+                            cur_dt  = d.get("deliverable_type","report")
+                            e_dtype = st.selectbox("Type", DELIVERABLE_TYPES,
+                                index=DELIVERABLE_TYPES.index(cur_dt)
+                                      if cur_dt in DELIVERABLE_TYPES else 0)
+                        with edd2:
+                            cur_diss  = d.get("dissemination_level","public")
+                            e_ddiss   = st.selectbox("Dissemination", DISSEMINATION_LEVELS,
+                                index=DISSEMINATION_LEVELS.index(cur_diss)
+                                      if cur_diss in DISSEMINATION_LEVELS else 0)
+                        with edd3:
+                            e_dmonth = st.number_input("Month", min_value=1, max_value=120,
+                                value=int(d.get("delivery_month",12) or 12))
+                        # Link to task
+                        task_opts_e = {"— No task link —": None}
+                        task_opts_e |= {f"{t['task_number']}: {t.get('task_title','')[:30]}": t["task_id"]
+                                        for t in wp_tasks}
+                        cur_dtask   = d.get("task_id")
+                        cur_dtsel   = next((l for l,v in task_opts_e.items() if v == cur_dtask),
+                                          "— No task link —")
+                        e_dtask_sel = st.selectbox("Linked Task", list(task_opts_e.keys()),
+                            index=list(task_opts_e.keys()).index(cur_dtsel),
+                            key=f"edt_{did}")
+                        dc1, dc2 = st.columns(2)
+                        with dc1:
+                            if st.form_submit_button("💾 Save", type="primary",
+                                                      use_container_width=True):
+                                ok3, _ = upsert_deliverable({
+                                    "deliverable_id":    did,
+                                    "proposal_id":       proposal_id,
+                                    "wp_id":             wp_id,
+                                    "task_id":           task_opts_e[e_dtask_sel],
+                                    "deliverable_number":  e_dnum.strip(),
+                                    "deliverable_title":   e_dtitle.strip(),
+                                    "deliverable_description": e_ddesc.strip(),
+                                    "deliverable_type":    e_dtype,
+                                    "dissemination_level": e_ddiss,
+                                    "delivery_month":      e_dmonth,
+                                })
+                                if ok3:
+                                    st.success("✅ Deliverable saved!"); st.rerun()
+                                else:
+                                    st.error("Save failed.")
+                        with dc2:
+                            if st.form_submit_button("🗑 Delete",
+                                                      use_container_width=True):
+                                delete_deliverable(did); st.rerun()
 
         # ── MILESTONES ────────────────────────────────────────────────────────
         with sub_tab3:
@@ -338,20 +440,59 @@ for wp in sorted(wps, key=lambda x: x.get("wp_number","")):
 
             for m in wp_mss:
                 mid  = m["milestone_id"]
-                warn = D["warning"]
-                st.markdown(
-                    f"<div style='background:{D["bg3"]};border-radius:8px;"
-                    f"padding:0.5rem 0.8rem;margin-bottom:0.3rem'>"
-                    f"<span style='color:{warn}'>★</span> "
-                    f"<strong style='color:{warn}'>{m['milestone_number']}</strong> "
-                    f"<span style='color:{D["text"]}'>{m.get('milestone_title','')}</span> "
-                    f"<span style='color:{D["muted"]};font-size:0.78rem'>"
-                    f"Month {m.get('due_month','?')}</span>"
-                    f"</div>",
-                    unsafe_allow_html=True
-                )
-                if st.button(f"🗑 Delete {m['milestone_number']}", key=f"dm_{mid}"):
-                    delete_milestone(mid); st.rerun()
+                mnum = m.get("milestone_number","")
+                with st.expander(
+                    f"★ {mnum}: {m.get('milestone_title','')}  ·  Month {m.get('due_month','?')}",
+                    expanded=False
+                ):
+                    with st.form(f"edit_ms_{mid}"):
+                        em1, em2 = st.columns([1, 4])
+                        with em1:
+                            e_mnum   = st.text_input("MS #", value=mnum)
+                        with em2:
+                            e_mtitle = st.text_input("Title", value=m.get("milestone_title",""))
+                        e_mdesc = st.text_area("Description",
+                            value=m.get("milestone_description",""), height=60)
+                        emm1, emm2 = st.columns(2)
+                        with emm1:
+                            e_mmonth = st.number_input("Due Month", min_value=1, max_value=120,
+                                value=int(m.get("due_month",12) or 12))
+                        with emm2:
+                            e_mmov   = st.text_input("Means of Verification",
+                                value=m.get("means_of_verification",""))
+                        # Link to task
+                        task_opts_m = {"— WP level —": None}
+                        task_opts_m |= {f"{t['task_number']}: {t.get('task_title','')[:30]}": t["task_id"]
+                                        for t in wp_tasks}
+                        cur_mtask   = m.get("task_id")
+                        cur_mtsel   = next((l for l,v in task_opts_m.items() if v == cur_mtask),
+                                          "— WP level —")
+                        e_mtask_sel = st.selectbox("Linked Task", list(task_opts_m.keys()),
+                            index=list(task_opts_m.keys()).index(cur_mtsel),
+                            key=f"emt_{mid}")
+                        mc1, mc2 = st.columns(2)
+                        with mc1:
+                            if st.form_submit_button("💾 Save", type="primary",
+                                                      use_container_width=True):
+                                ok4, _ = upsert_milestone({
+                                    "milestone_id":      mid,
+                                    "proposal_id":       proposal_id,
+                                    "wp_id":             wp_id,
+                                    "task_id":           task_opts_m[e_mtask_sel],
+                                    "milestone_number":  e_mnum.strip(),
+                                    "milestone_title":   e_mtitle.strip(),
+                                    "milestone_description": e_mdesc.strip(),
+                                    "due_month":         e_mmonth,
+                                    "means_of_verification": e_mmov.strip(),
+                                })
+                                if ok4:
+                                    st.success("✅ Milestone saved!"); st.rerun()
+                                else:
+                                    st.error("Save failed.")
+                        with mc2:
+                            if st.form_submit_button("🗑 Delete",
+                                                      use_container_width=True):
+                                delete_milestone(mid); st.rerun()
 
 # ── Persistent Gantt ──────────────────────────────────────────────────────────
 tasks_all = get_tasks(proposal_id)
