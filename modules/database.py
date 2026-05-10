@@ -34,6 +34,43 @@ def get_proposal(proposal_id: str) -> dict | None:
     except Exception:
         return None
 
+
+
+def get_proposals_for_user(organisation: str = "", is_admin: bool = False) -> list:
+    """
+    Return proposals the user is allowed to access.
+    Admins: all proposals.
+    Regular users: only proposals where their organisation is the
+                   coordinator OR appears in partners_list.
+    """
+    all_proposals = get_all_proposals()
+    if is_admin or not organisation:
+        return all_proposals
+
+    import json
+    org_lower = organisation.strip().lower()
+    filtered  = []
+
+    for p in all_proposals:
+        # Check coordinator
+        coord = (p.get("coordinator") or "").lower()
+        if org_lower and (org_lower in coord or coord in org_lower):
+            filtered.append(p)
+            continue
+
+        # Check partners_list (stored as JSONB array or comma list)
+        plist = p.get("partners_list") or []
+        if isinstance(plist, str):
+            try:    plist = json.loads(plist)
+            except: plist = [plist]
+        for entry in plist:
+            entry_lower = str(entry).lower().strip()
+            if org_lower and (org_lower in entry_lower or entry_lower in org_lower):
+                filtered.append(p)
+                break
+
+    return filtered
+
 def get_proposal_partners(proposal_id: str) -> list:
     """
     Return partners involved in this proposal.
